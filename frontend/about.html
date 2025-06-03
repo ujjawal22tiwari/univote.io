@@ -1,0 +1,269 @@
+
+
+
+
+
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Voting DApp</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f1f1f1;
+      padding: 2rem;
+    }
+    .container {
+      background: white;
+      padding: 2rem;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      max-width: 500px;
+      margin: auto;
+    }
+    h2 {
+      text-align: center;
+    }
+    button, input {
+      width: 100%;
+      padding: 10px;
+      margin-top: 10px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+    }
+    button {
+      cursor: pointer;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+    }
+    button.disconnect {
+      background-color: #e74c3c;
+    }
+    #status {
+      margin-top: 10px;
+      text-align: center;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Voting DApp</h2>
+
+    <button id="connectBtn">Connect Wallet</button>
+    <button id="disconnectBtn" class="disconnect" style="display:none;">Disconnect</button>
+
+    <div id="walletInfo" style="margin-top: 1rem; display: none;">
+      <p><strong>Wallet Address:</strong> <span id="walletAddress"></span></p>
+    </div>
+
+    <input type="text" id="candidateInput" placeholder="Candidate name..." />
+    <input type="text" id="partyInput" placeholder="Candidate party..." /> <!-- ✅ Added -->
+    <button id="addCandidateBtn">Add Candidate</button>
+
+    <div id="status"></div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.8.1/ethers.umd.min.js"></script>
+  <script>
+    let signer, contract;
+
+    const contractAddress = "0x5e17b14ADd6c386305A32928F985b29bbA34Eff5";
+    const contractABI =[
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "_name",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_party",
+				"type": "string"
+			}
+		],
+		"name": "addCandidate",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "uint256",
+				"name": "id",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "string",
+				"name": "name",
+				"type": "string"
+			},
+			{
+				"indexed": false,
+				"internalType": "string",
+				"name": "party",
+				"type": "string"
+			}
+		],
+		"name": "CandidateAdded",
+		"type": "event"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "_candidateId",
+				"type": "uint256"
+			}
+		],
+		"name": "vote",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "address",
+				"name": "voter",
+				"type": "address"
+			},
+			{
+				"indexed": true,
+				"internalType": "uint256",
+				"name": "candidateId",
+				"type": "uint256"
+			}
+		],
+		"name": "Voted",
+		"type": "event"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"name": "candidates",
+		"outputs": [
+			{
+				"internalType": "string",
+				"name": "name",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "party",
+				"type": "string"
+			},
+			{
+				"internalType": "uint256",
+				"name": "voteCount",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "getCandidateCount",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"name": "hasVoted",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	}
+]
+
+    async function connectWallet() {
+      if (window.ethereum) {
+        try {
+          const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+          const provider = new ethers.BrowserProvider(window.ethereum);
+          signer = await provider.getSigner();
+          contract = new ethers.Contract(contractAddress, contractABI, signer);
+
+          document.getElementById('walletAddress').textContent = accounts[0];
+          document.getElementById('walletInfo').style.display = 'block';
+          document.getElementById('connectBtn').style.display = 'none';
+          document.getElementById('disconnectBtn').style.display = 'inline-block';
+        } catch (err) {
+          console.error(err);
+        }
+      } else {
+        alert("MetaMask not detected");
+      }
+    }
+
+    function disconnectWallet() {
+      signer = null;
+      contract = null;
+      document.getElementById('walletInfo').style.display = 'none';
+      document.getElementById('connectBtn').style.display = 'inline-block';
+      document.getElementById('disconnectBtn').style.display = 'none';
+    }
+
+    async function addCandidate() {
+      const name = document.getElementById("candidateInput").value;
+      const party = document.getElementById("partyInput").value;
+      const status = document.getElementById("status");
+
+      if (!contract || !name || !party) {
+        return alert("Please connect wallet and enter both name and party.");
+      }
+
+      try {
+        status.textContent = "Sending transaction...";
+        const tx = await contract.addCandidate(name, party); // ✅ Fixed
+        await tx.wait();
+        status.textContent = `Candidate '${name}' added successfully!`;
+      } catch (err) {
+        console.error(err);
+        status.textContent = "Transaction failed.";
+      }
+    }
+
+    document.getElementById("connectBtn").onclick = connectWallet;
+    document.getElementById("disconnectBtn").onclick = disconnectWallet;
+    document.getElementById("addCandidateBtn").onclick = addCandidate;
+  </script>
+</body>
+</html>

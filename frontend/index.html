@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>UNI-VOTE.</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f9f9f9; padding: 2rem; }
+    .container { max-width: 600px; margin: auto; background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 0 10px #ccc; }
+    h2 { text-align: center; }
+    input, button { width: 100%; padding: 10px; margin-top: 10px; border-radius: 5px; border: 1px solid #ccc; }
+    button { background-color: #4caf50; color: white; border: none; cursor: pointer; }
+    button.vote-btn { background-color: #2196F3; margin-top: 5px; }
+    button.disconnect { background-color: #e74c3c; }
+    #status { margin-top: 10px; font-weight: bold; text-align: center; }
+    ul { list-style: none; padding: 0; }
+    li { background: #eee; margin-top: 10px; padding: 10px; border-radius: 5px; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h2>UNI-VOTE.</h2>
+
+  <button id="connectBtn">Connect Wallet</button>
+  <button id="disconnectBtn" class="disconnect" style="display:none;">Disconnect</button>
+
+  <div id="walletInfo" style="display:none; margin-top:1rem;">
+    <p><strong>Wallet Address:</strong> <span id="walletAddress"></span></p>
+  </div>
+
+  <input type="text" id="candidateName" placeholder="Candidate Name" />
+  <input type="text" id="candidateParty" placeholder="Candidate Party" />
+  <button id="addCandidateBtn">Add Candidate</button>
+
+  <h3>Candidate List</h3>
+  <ul id="candidateList"></ul>
+
+  <div id="status"></div>
+</div>
+
+<ul id="candidateList"></ul>
+<div id="status"></div>
+
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.8.1/ethers.umd.min.js"></script>
+<script>
+  let signer, contract;
+
+  // अपने deployed contract address डालें
+  const contractAddress = "0x5813a787557F3d703426DB2Bf4296A0D8EfC8BEd";
+
+  const contractABI = [
+    {
+      "inputs": [
+        { "internalType": "string", "name": "_name", "type": "string" },
+        { "internalType": "string", "name": "_party", "type": "string" }
+      ],
+      "name": "addCandidate",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [{ "internalType": "uint256", "name": "_candidateId", "type": "uint256" }],
+      "name": "vote",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "getCandidateCount",
+      "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+      "name": "candidates",
+      "outputs": [
+        { "internalType": "string", "name": "name", "type": "string" },
+        { "internalType": "string", "name": "party", "type": "string" },
+        { "internalType": "uint256", "name": "voteCount", "type": "uint256" }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [{ "internalType": "address", "name": "", "type": "address" }],
+      "name": "hasVoted",
+      "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ];
+
+  async function connectWallet() {
+    if (!window.ethereum) {
+      alert("MetaMask नहीं मिला। कृपया MetaMask इंस्टॉल करें।");
+      return;
+    }
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const accounts = await provider.send("eth_requestAccounts", []);
+      signer = await provider.getSigner();
+      contract = new ethers.Contract(contractAddress, contractABI, signer);
+
+      document.getElementById("walletAddress").textContent = accounts[0];
+      document.getElementById("walletInfo").style.display = "block";
+      document.getElementById("connectBtn").style.display = "none";
+      document.getElementById("disconnectBtn").style.display = "inline-block";
+
+      loadCandidates();
+    } catch (err) {
+      console.error(err);
+      alert("Wallet connect करने में समस्या आई।");
+    }
+  }
+
+  function disconnectWallet() {
+    signer = null;
+    contract = null;
+    document.getElementById("walletInfo").style.display = "none";
+    document.getElementById("connectBtn").style.display = "inline-block";
+    document.getElementById("disconnectBtn").style.display = "none";
+    document.getElementById("candidateList").innerHTML = "";
+    document.getElementById("status").textContent = "";
+  }
+
+  async function addCandidate() {
+    const name = document.getElementById("candidateName").value.trim();
+    const party = document.getElementById("candidateParty").value.trim();
+    const status = document.getElementById("status");
+
+    if (!contract) {
+      alert("Please connect your wallet first.");
+      return;
+    }
+    if (!name || !party) {
+      alert("Please fill in both Candidate Name and Party.");
+      return;
+    }
+
+    try {
+      status.textContent = "Adding candidate...";
+      const tx = await contract.addCandidate(name, party);
+      await tx.wait();
+      status.textContent = "Candidate added successfully!";
+      document.getElementById("candidateName").value = "";
+      document.getElementById("candidateParty").value = "";
+      loadCandidates();
+    } catch (error) {
+      console.error("Error adding candidate:", error);
+      status.textContent = "Failed to add candidate";
+    }
+  }
+
+  async function loadCandidates() {
+    if (!contract) return;
+    const list = document.getElementById("candidateList");
+    list.innerHTML = "";
+    try {
+      const count = await contract.getCandidateCount();
+      for (let i = 0; i < count; i++) {
+        const candidate = await contract.candidates(i);
+        const li = document.createElement("li");
+
+        li.innerHTML = `
+          <strong>${candidate.name}</strong> (${candidate.party})<br/>
+          Votes: ${candidate.voteCount}<br/>
+          <button class="vote-btn" onclick="vote(${i})">Vote</button>
+        `;
+        list.appendChild(li);
+      }
+    } catch (err) {
+      console.error("Error loading candidates:", err);
+    }
+  }
+
+  async function vote(candidateId) {
+    const status = document.getElementById("status");
+    if (!contract) {
+      alert("Connect your wallet first.");
+      return;
+    }
+    try {
+      status.textContent = "Voting in progress...";
+      const tx = await contract.vote(candidateId);
+      await tx.wait();
+      status.textContent = "Vote cast successfully!";
+      loadCandidates();
+    } catch (error) {
+      console.error("Voting में त्रुटि:", error);
+      status.textContent = "Voting failed or you have already voted.";
+    }
+  }
+
+  document.getElementById("connectBtn").onclick = connectWallet;
+  document.getElementById("disconnectBtn").onclick = disconnectWallet;
+  document.getElementById("addCandidateBtn").onclick = addCandidate;
+
+  // global function for vote buttons
+  window.vote = vote;
+
+
+
+
+
+
+
+
+
+
+
+
+</script>
+
+
+</body>
+</html>
